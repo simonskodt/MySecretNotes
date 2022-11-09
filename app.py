@@ -1,8 +1,7 @@
 import json, sqlite3, click, functools, os, hashlib,time, random, sys
 from flask import Flask, current_app, g, session, redirect, render_template, url_for, request
-
-
-
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 ### DATABASE FUNCTIONS ###
 
@@ -46,6 +45,24 @@ app = Flask(__name__)
 app.database = "db.sqlite3"
 app.secret_key = os.urandom(32)
 
+### SETUP RATE LIMIT OF ROUTES ###
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    storage_uri="memory://"
+)
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return f"""<html>
+                <body>
+                    <h1>429</h1>
+                    <h2>Too many requests</h2>
+                    <p>{e}</p>
+                </body>
+                </html>
+            """
+
 ### ADMINISTRATOR'S PANEL ###
 def login_required(view):
     @functools.wraps(view)
@@ -67,6 +84,7 @@ def index():
 @login_required
 def notes():
     importerror=""
+
     #Posting a new note:
     if request.method == 'POST':
         if request.form['submit_button'] == 'add note':
@@ -106,36 +124,50 @@ def notes():
 
 
 @app.route("/login/", methods=('GET', 'POST'))
+@limiter.limit("5/minute")
 def login():
+    if not session.get('attempt'):
+        session['attempt'] = 4
+    
     error = ""
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        db = connect_db()
-        c = db.cursor()
-        statement = "SELECT * FROM users WHERE username = ? AND password = ?"
-        c.execute(statement, (username, password))
-        result = c.fetchall()
+        loginAttempt = session['attempt']
+        render_template('login.html', error = error)
 
-        if len(result) > 0:
-            session.clear()
-            session['logged_in'] = True
-            session['userid'] = result[0][0]
-            session['username']=result[0][1]
-            return redirect(url_for('index'))
+        if loginAttempt == 1:
+            error = "Login attempts exceeded!"
         else:
-            error = "Wrong username or password!"
-    return render_template('login.html',error=error)
+            username = request.form['username']
+            password = request.form['password']
+
+            db = connect_db()
+            c = db.cursor()
+            statement = "SELECT * FROM users WHERE username = ? AND password = ?"
+            c.execute(statement, (username, password))
+            result = c.fetchall()
+            
+            if len(result) > 0:
+                session.clear()
+                session['logged_in'] = True
+                session['userid'] = result[0][0]
+                session['username']= result[0][1]
+                loginAttempt = 4
+                session['attempt'] = loginAttempt
+                return redirect(url_for('index'))
+            else:
+                loginAttempt -= 1
+                session['attempt'] = loginAttempt
+                error = f"Wrong username or password! Tries left: {loginAttempt}"
+    return render_template('login.html', error=error)
 
 
 @app.route("/register/", methods=('GET', 'POST'))
+@limiter.limit("5/minute")
 def register():
     errored = False
     usererror = ""
     passworderror = ""
     if request.method == 'POST':
-        
-
         username = request.form['username']
         password = request.form['password']
         db = connect_db()
