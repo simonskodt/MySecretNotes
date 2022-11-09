@@ -151,12 +151,10 @@ def login():
                 session['logged_in'] = True
                 session['userid'] = result[0][0]
                 session['username']= result[0][1]
-                loginAttempt = 4
-                session['attempt'] = loginAttempt
+                session['attempt'] = 4
                 return redirect(url_for('index'))
             else:
-                loginAttempt -= 1
-                session['attempt'] = loginAttempt
+                session['attempt'] = -1
                 error = f"Wrong username or password! Tries left: {loginAttempt}"
     return render_template('login.html', error=error)
 
