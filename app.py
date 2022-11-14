@@ -119,7 +119,7 @@ def notes():
 
 
 @app.route("/login/", methods=('GET', 'POST'))
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 def login():
     if not session.get('attempt'):
         session['attempt'] = 4
@@ -146,16 +146,18 @@ def login():
                 session['logged_in'] = True
                 session['userid'] = result[0][0]
                 session['username']= result[0][1]
-                session['attempt'] = 4
+                loginAttempt = 4
+                session['attempt'] = loginAttempt
                 return redirect(url_for('index'))
             else:
-                session['attempt'] = -1
+                loginAttempt -= 1
+                session['attempt'] = loginAttempt
                 error = f"Wrong username or password! Tries left: {loginAttempt}"
     return render_template('login.html', error=error)
 
 
 @app.route("/register/", methods=('GET', 'POST'))
-@limiter.limit("5/minute")
+@limiter.limit("10/minute")
 def register():
     errored = False
     usererror = ""
